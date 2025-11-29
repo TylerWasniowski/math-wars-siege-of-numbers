@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
 
 export const Numpad: React.FC = () => {
@@ -7,6 +7,22 @@ export const Numpad: React.FC = () => {
   const handleTap = (digit: number) => {
     appendInput(digit.toString());
   };
+
+  // Keyboard Support
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        appendInput(e.key);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        deleteInput();
+      } else if (e.key === 'Enter') {
+        submitAnswer();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [appendInput, deleteInput, submitAnswer]);
 
   const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 

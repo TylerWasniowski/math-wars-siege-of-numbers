@@ -18,6 +18,7 @@ interface GameState {
   
   // Turn Data
   currentProblem: MathProblem | null;
+  nextRoundProblem: MathProblem | null; // Store the problem for the next player
   currentInput: string;
   timeRemaining: number; // in seconds
   
@@ -46,6 +47,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentTurnIndex: 0,
   difficulty: 'EASY',
   currentProblem: null,
+  nextRoundProblem: null,
   currentInput: '',
   timeRemaining: TURN_DURATION,
 
@@ -63,14 +65,34 @@ export const useGameStore = create<GameState>((set, get) => ({
       phase: 'INTERSTITIAL',
       currentInput: '',
       timeRemaining: TURN_DURATION,
+      currentProblem: null,
+      nextRoundProblem: null, // Reset on new game
     });
   },
 
   setPhase: (phase) => set({ phase }),
 
   startTurn: () => {
-    const { difficulty } = get();
-    const problem = generateProblem(difficulty);
+    const { difficulty, nextRoundProblem, currentTurnIndex } = get();
+    
+    // Logic:
+    // If it's the first player (index 0), generate a NEW problem.
+    // If it's subsequent players, use the SAME problem (stored in nextRoundProblem).
+    // Wait, "For each round" means Player 1 gets X, Player 2 gets X. Next round, Player 1 gets Y, Player 2 gets Y.
+    
+    let problem: MathProblem;
+
+    if (currentTurnIndex === 0) {
+      // Start of a new round -> Generate new problem
+      problem = generateProblem(difficulty);
+      // Store it for subsequent players in this round
+      set({ nextRoundProblem: problem });
+    } else {
+      // Subsequent players use the stored problem
+      // Fallback to generate if null (shouldn't happen if logic is correct)
+      problem = nextRoundProblem || generateProblem(difficulty);
+    }
+
     set({
       phase: 'ACTIVE',
       currentProblem: problem,
@@ -120,8 +142,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       players: updatedPlayers,
       phase: 'RESOLUTION',
     });
-
-    // Auto-advance logic could go here or be triggered by UI
   },
 
   nextTurn: () => {

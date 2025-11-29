@@ -56,7 +56,7 @@ export const HUD: React.FC = () => {
       {phase === 'ACTIVE' && currentProblem && (
         <div style={{ 
           position: 'absolute',
-          top: '20%', // Moved up significantly
+          top: '15%', // Moved UP from 20% to 15% to avoid overlap
           left: '50%',
           transform: 'translate(-50%, -50%)',
           background: 'rgba(0,0,0,0.8)', 
