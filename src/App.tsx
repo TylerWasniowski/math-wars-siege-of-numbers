@@ -12,6 +12,18 @@ function App() {
     console.log('App.tsx: Mounted. Current phase:', phase);
   }, [phase]);
 
+  // Keyboard listener for Next Round
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (phase === 'RESOLUTION' && e.key === 'Enter') {
+        nextTurn();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [phase, nextTurn]);
+
   if (phase === 'SETUP') {
     return (
       <div style={{ 
@@ -73,6 +85,9 @@ function App() {
                >
                  Next Round
                </button>
+               <div style={{ marginTop: '10px', fontSize: '0.8em', color: '#aaa' }}>
+                 Press Enter ↵
+               </div>
              </div>
           )}
         </>

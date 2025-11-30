@@ -40,7 +40,7 @@ const SCORE_CONFIG = {
   HARD: { base: 400, bonus: 200, penalty: 100 },
 };
 
-const TURN_DURATION = 15;
+const TURN_DURATION = 30;
 
 export const useGameStore = create<GameState>((set, get) => ({
   phase: 'SETUP',

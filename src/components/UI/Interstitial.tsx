@@ -1,9 +1,20 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
 
 export const Interstitial: React.FC = () => {
   const { players, currentTurnIndex, startTurn } = useGameStore();
   const currentPlayer = players[currentTurnIndex];
+
+  // Enable Enter key to start turn
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        startTurn();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [startTurn]);
 
   return (
     <div style={{
@@ -38,7 +49,9 @@ export const Interstitial: React.FC = () => {
       >
         READY
       </button>
+      <div style={{ marginTop: '15px', color: '#888' }}>
+        Press Enter ↵
+      </div>
     </div>
   );
 };
-
