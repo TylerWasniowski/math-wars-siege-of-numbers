@@ -6,7 +6,8 @@ export type GamePhase = 'SETUP' | 'INTERSTITIAL' | 'READY' | 'ACTIVE' | 'RESOLUT
 export interface Player {
   id: number;
   name: string;
-  score: number;
+  health: number;
+  maxHealth: number;
   isCpu: boolean;
 }
 
@@ -15,13 +16,14 @@ interface GameState {
   players: Player[];
   currentTurnIndex: number;
   difficulty: Difficulty;
+  round: number;
   
   // Turn Data
   currentProblem: MathProblem | null;
   nextRoundProblem: MathProblem | null;
   currentInput: string;
   timeRemaining: number; // in seconds
-  feedback: string | null; // Message to display (e.g. "-50", "+200")
+  feedback: string | null; 
   
   // Actions
   initGame: (playerCount: number, difficulty: Difficulty) => void;
@@ -34,12 +36,13 @@ interface GameState {
   updateTimer: (dt: number) => void;
 }
 
-const SCORE_CONFIG = {
-  EASY: { base: 100, bonus: 50, penalty: 25 },
-  MEDIUM: { base: 200, bonus: 100, penalty: 50 },
-  HARD: { base: 400, bonus: 200, penalty: 100 },
+const DAMAGE_CONFIG = {
+  EASY: { base: 100, bonus: 50, penalty: 50 },
+  MEDIUM: { base: 150, bonus: 100, penalty: 100 },
+  HARD: { base: 200, bonus: 200, penalty: 150 },
 };
 
+const MAX_HEALTH = 1000;
 const TURN_DURATION = 30;
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -47,6 +50,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   players: [],
   currentTurnIndex: 0,
   difficulty: 'EASY',
+  round: 1,
   currentProblem: null,
   nextRoundProblem: null,
   currentInput: '',
@@ -57,9 +61,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     const players: Player[] = Array.from({ length: playerCount }, (_, i) => ({
       id: i,
       name: `Player ${i + 1}`,
-      score: 0,
-      isCpu: false, // TODO: Add CPU logic later
+      health: MAX_HEALTH,
+      maxHealth: MAX_HEALTH,
+      isCpu: false, 
     }));
+    
     set({
       players,
       difficulty,
@@ -70,17 +76,27 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentProblem: null,
       nextRoundProblem: null,
       feedback: null,
+      round: 1
     });
   },
 
   setPhase: (phase) => set({ phase }),
 
   startTurn: () => {
-    const { difficulty, nextRoundProblem, currentTurnIndex } = get();
+    const { difficulty, nextRoundProblem, currentTurnIndex, players } = get();
     
+    // Check for Game Over logic (if any player is dead)
+    if (players.some(p => p.health <= 0)) {
+      set({ phase: 'GAME_OVER' });
+      return;
+    }
+
     let problem: MathProblem;
 
     if (currentTurnIndex === 0) {
+      // New Round starting (since P1 is going)
+      // Actually, "Round" usually increments when everyone has gone once.
+      // But for fairness logic, we generate new problem for P1.
       problem = generateProblem(difficulty);
       set({ nextRoundProblem: problem });
     } else {
@@ -110,83 +126,107 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   submitAnswer: () => {
-    const { currentProblem, currentInput, timeRemaining, difficulty, players, currentTurnIndex } = get();
+    const { currentProblem, currentInput, timeRemaining, difficulty, players, currentTurnIndex, round } = get();
     if (!currentProblem) return;
 
     const inputVal = parseInt(currentInput, 10);
-    // Prevent submitting empty input unless time is up
     if (isNaN(inputVal) && timeRemaining > 0) return;
 
     const isCorrect = inputVal === currentProblem.answer;
-    const config = SCORE_CONFIG[difficulty];
+    const config = DAMAGE_CONFIG[difficulty];
     
     const updatedPlayers = [...players];
     const currentPlayer = updatedPlayers[currentTurnIndex];
+    const opponentIndex = (currentTurnIndex + 1) % players.length; // Simple 2-player logic
+    const opponent = updatedPlayers[opponentIndex];
 
-    // Case 1: Correct Answer
     if (isCorrect) {
+      // Deal Damage to Opponent
       const timeBonus = config.bonus * (timeRemaining / TURN_DURATION);
-      const scoreChange = Math.round(config.base + timeBonus);
+      const damage = Math.round(config.base + timeBonus);
       
-      const newScore = currentPlayer.score + scoreChange;
-      currentPlayer.score = Math.max(0, newScore); // Floor at 0
+      opponent.health = Math.max(0, opponent.health - damage);
+
+      // Check Win Condition immediately
+      if (opponent.health <= 0) {
+         set({
+             players: updatedPlayers,
+             phase: 'GAME_OVER',
+             feedback: `KO!`,
+             currentInput: ''
+         });
+         return;
+      }
+
+      // Determine next turn logic
+      const nextIndex = (currentTurnIndex + 1) % players.length;
+      let nextRound = round;
+      if (nextIndex === 0) {
+        nextRound += 1;
+      }
 
       set({
         players: updatedPlayers,
-        phase: 'RESOLUTION',
+        currentTurnIndex: nextIndex,
+        phase: 'INTERSTITIAL',
         currentInput: '',
-        feedback: null
+        feedback: null,
+        round: nextRound
       });
       return;
     }
 
-    // Case 2: Timeout (Game Over for turn)
+    // Timeout or Penalty Logic
+    // Self-Damage
+    const penalty = config.penalty;
+    currentPlayer.health = Math.max(0, currentPlayer.health - penalty);
+
+    if (currentPlayer.health <= 0) {
+         set({
+             players: updatedPlayers,
+             phase: 'GAME_OVER',
+             feedback: `KO!`,
+             currentInput: ''
+         });
+         return;
+    }
+
     if (timeRemaining <= 0) {
-       const penalty = config.penalty;
-       const newScore = currentPlayer.score - penalty;
-       currentPlayer.score = Math.max(0, newScore);
-       
+       // Timeout forces next turn
+       const nextIndex = (currentTurnIndex + 1) % players.length;
+       let nextRound = round;
+       if (nextIndex === 0) {
+         nextRound += 1;
+       }
+
        set({
          players: updatedPlayers,
-         phase: 'RESOLUTION',
+         currentTurnIndex: nextIndex,
+         phase: 'INTERSTITIAL',
          currentInput: '',
-         feedback: null
+         feedback: null,
+         round: nextRound
        });
        return;
     }
 
-    // Case 3: Incorrect Answer (Penalty & Continue)
-    const penalty = config.penalty;
-    const newScore = currentPlayer.score - penalty;
-    currentPlayer.score = Math.max(0, newScore);
-    
+    // Wrong Answer but time remains -> Feedback loop
     set({
       players: updatedPlayers,
-      feedback: `-${penalty}`,
-      currentInput: '' // Clear input to allow retry
+      feedback: `-${penalty} HP`,
+      currentInput: '' 
     });
 
-    // Clear feedback message after 1.5s
     setTimeout(() => {
-      // Only clear if it hasn't changed or we haven't moved phase
       const { feedback, phase } = get();
-      if (phase === 'ACTIVE' && feedback === `-${penalty}`) {
+      if (phase === 'ACTIVE' && feedback === `-${penalty} HP`) {
         set({ feedback: null });
       }
     }, 1000);
   },
 
   nextTurn: () => {
-    const { players, currentTurnIndex } = get();
-    const nextIndex = (currentTurnIndex + 1) % players.length;
-    
-    set({
-      currentTurnIndex: nextIndex,
-      phase: 'INTERSTITIAL',
-      currentInput: '',
-      timeRemaining: TURN_DURATION,
-      feedback: null
-    });
+    // Deprecated manual next turn
   },
 
   updateTimer: (dt) => {
