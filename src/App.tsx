@@ -5,23 +5,27 @@ import { HUD } from './components/UI/HUD';
 import { Numpad } from './components/UI/Numpad';
 
 function App() {
-  const { phase, initGame, startTurn, players, currentTurnIndex } = useGameStore();
+  const { phase, initGame, startTurn, players, currentTurnIndex, setPhase } = useGameStore();
 
   useEffect(() => {
     console.log('App.tsx: Mounted. Current phase:', phase);
   }, [phase]);
 
-  // Keyboard listener for "Ready" (Enter key)
+  // Keyboard listener for "Ready" and "Game Over"
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (phase === 'INTERSTITIAL' && e.key === 'Enter') {
-        startTurn();
+      if (e.key === 'Enter') {
+        if (phase === 'INTERSTITIAL') {
+          startTurn();
+        } else if (phase === 'GAME_OVER') {
+          setPhase('SETUP');
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [phase, startTurn]);
+  }, [phase, startTurn, setPhase]);
 
   if (phase === 'SETUP') {
     return (
@@ -47,29 +51,33 @@ function App() {
   }
 
   const currentPlayer = players[currentTurnIndex];
+  // Find winner: the one with health > 0
+  const winner = players.find(p => p.health > 0);
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#222' }}>
       <Scene />
       
-      {/* HUD and Numpad are always visible behind overlay, but dimmed */}
-      <div style={{ 
-        opacity: phase === 'INTERSTITIAL' ? 0.3 : 1, 
-        pointerEvents: phase === 'INTERSTITIAL' ? 'none' : 'auto',
-        transition: 'opacity 0.3s'
-      }}>
-        <HUD />
+      {/* HUD and Numpad are visible unless game over */}
+      {phase !== 'GAME_OVER' && (
         <div style={{ 
-          position: 'absolute', 
-          bottom: '20px', 
-          width: '100%', 
-          zIndex: 10
+          opacity: phase === 'INTERSTITIAL' ? 0.3 : 1, 
+          pointerEvents: phase === 'INTERSTITIAL' ? 'none' : 'auto',
+          transition: 'opacity 0.3s'
         }}>
-          <Numpad />
+          <HUD />
+          <div style={{ 
+            position: 'absolute', 
+            bottom: '20px', 
+            width: '100%', 
+            zIndex: 10
+          }}>
+            <Numpad />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Pass to Player Overlay (Replaces old full-screen Interstitial) */}
+      {/* Pass to Player Overlay */}
       {phase === 'INTERSTITIAL' && (
         <div style={{
           position: 'absolute',
@@ -103,6 +111,51 @@ function App() {
             }}
           >
             READY
+          </button>
+          <div style={{ marginTop: '15px', fontSize: '0.9em', color: '#888' }}>
+            Press Enter ↵
+          </div>
+        </div>
+      )}
+
+      {/* GAME OVER Overlay */}
+      {phase === 'GAME_OVER' && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(0,0,0,0.9)',
+          padding: '50px',
+          borderRadius: '20px',
+          color: 'white',
+          zIndex: 60,
+          textAlign: 'center',
+          minWidth: '400px',
+          boxShadow: '0 15px 50px rgba(0,0,0,1)',
+          border: '2px solid gold'
+        }}>
+          <h1 style={{ fontSize: '4em', margin: '0 0 20px 0', color: 'gold', textShadow: '0 0 20px orange' }}>
+            VICTORY!
+          </h1>
+          <h2 style={{ fontSize: '2em', color: '#fff' }}>
+            {winner ? `${winner.name} Wins!` : 'Draw!'}
+          </h2>
+          
+          <button 
+            onClick={() => setPhase('SETUP')}
+            style={{ 
+              padding: '15px 40px', 
+              fontSize: '1.5em', 
+              marginTop: '30px', 
+              cursor: 'pointer',
+              background: '#333',
+              color: 'white',
+              border: '2px solid white',
+              borderRadius: '8px'
+            }}
+          >
+            MAIN MENU
           </button>
           <div style={{ marginTop: '15px', fontSize: '0.9em', color: '#888' }}>
             Press Enter ↵
