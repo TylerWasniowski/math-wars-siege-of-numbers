@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export const HUD: React.FC = () => {
   const { 
@@ -8,7 +9,8 @@ export const HUD: React.FC = () => {
     currentProblem, 
     timeRemaining, 
     updateTimer, 
-    phase 
+    phase,
+    feedback 
   } = useGameStore();
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export const HUD: React.FC = () => {
       flexDirection: 'column',
       justifyContent: 'space-between',
       height: '100vh',
-      zIndex: 20 // Increased z-index to sit above Numpad
+      zIndex: 20
     }}>
       {/* Top Scoreboard */}
       <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
@@ -56,7 +58,7 @@ export const HUD: React.FC = () => {
       {phase === 'ACTIVE' && currentProblem && (
         <div style={{ 
           position: 'absolute',
-          top: '15%', // Moved UP from 20% to 15% to avoid overlap
+          top: '15%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
           background: 'rgba(0,0,0,0.8)', 
@@ -70,6 +72,30 @@ export const HUD: React.FC = () => {
           <h1 style={{ fontSize: '3.5em', margin: 0 }}>{currentProblem.question} = ?</h1>
         </div>
       )}
+
+      {/* Feedback Message (e.g. -25) */}
+      <AnimatePresence>
+        {feedback && (
+          <motion.div
+            initial={{ opacity: 0, y: 0, scale: 0.5 }}
+            animate={{ opacity: 1, y: -50, scale: 1.2 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'absolute',
+              top: '30%', // Below the math problem
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              color: feedback.startsWith('+') ? '#4f4' : '#f44',
+              fontSize: '4em',
+              fontWeight: 'bold',
+              textShadow: '0 2px 10px black',
+              zIndex: 40
+            }}
+          >
+            {feedback}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Fuse Timer Bar */}
       {phase === 'ACTIVE' && (

@@ -18,9 +18,10 @@ interface GameState {
   
   // Turn Data
   currentProblem: MathProblem | null;
-  nextRoundProblem: MathProblem | null; // Store the problem for the next player
+  nextRoundProblem: MathProblem | null;
   currentInput: string;
   timeRemaining: number; // in seconds
+  feedback: string | null; // Message to display (e.g. "-50", "+200")
   
   // Actions
   initGame: (playerCount: number, difficulty: Difficulty) => void;
@@ -50,6 +51,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   nextRoundProblem: null,
   currentInput: '',
   timeRemaining: TURN_DURATION,
+  feedback: null,
 
   initGame: (playerCount, difficulty) => {
     const players: Player[] = Array.from({ length: playerCount }, (_, i) => ({
@@ -66,7 +68,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentInput: '',
       timeRemaining: TURN_DURATION,
       currentProblem: null,
-      nextRoundProblem: null, // Reset on new game
+      nextRoundProblem: null,
+      feedback: null,
     });
   },
 
@@ -75,21 +78,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   startTurn: () => {
     const { difficulty, nextRoundProblem, currentTurnIndex } = get();
     
-    // Logic:
-    // If it's the first player (index 0), generate a NEW problem.
-    // If it's subsequent players, use the SAME problem (stored in nextRoundProblem).
-    // Wait, "For each round" means Player 1 gets X, Player 2 gets X. Next round, Player 1 gets Y, Player 2 gets Y.
-    
     let problem: MathProblem;
 
     if (currentTurnIndex === 0) {
-      // Start of a new round -> Generate new problem
       problem = generateProblem(difficulty);
-      // Store it for subsequent players in this round
       set({ nextRoundProblem: problem });
     } else {
-      // Subsequent players use the stored problem
-      // Fallback to generate if null (shouldn't happen if logic is correct)
       problem = nextRoundProblem || generateProblem(difficulty);
     }
 
@@ -98,13 +92,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentProblem: problem,
       currentInput: '',
       timeRemaining: TURN_DURATION,
+      feedback: null,
     });
   },
 
   appendInput: (digit) => {
     const { currentInput, phase } = get();
     if (phase !== 'ACTIVE') return;
-    if (currentInput.length >= 5) return; // Cap length
+    if (currentInput.length >= 5) return; 
     set({ currentInput: currentInput + digit });
   },
 
@@ -119,42 +114,78 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!currentProblem) return;
 
     const inputVal = parseInt(currentInput, 10);
+    // Prevent submitting empty input unless time is up
+    if (isNaN(inputVal) && timeRemaining > 0) return;
+
     const isCorrect = inputVal === currentProblem.answer;
     const config = SCORE_CONFIG[difficulty];
     
-    let scoreChange = 0;
-    
-    if (isCorrect) {
-      const timeBonus = config.bonus * (timeRemaining / TURN_DURATION);
-      scoreChange = Math.round(config.base + timeBonus);
-    } else {
-      scoreChange = -config.penalty;
-    }
-
     const updatedPlayers = [...players];
     const currentPlayer = updatedPlayers[currentTurnIndex];
-    
-    // Apply score change, respecting floor of 0
-    const newScore = currentPlayer.score + scoreChange;
-    currentPlayer.score = Math.max(0, newScore);
 
+    // Case 1: Correct Answer
+    if (isCorrect) {
+      const timeBonus = config.bonus * (timeRemaining / TURN_DURATION);
+      const scoreChange = Math.round(config.base + timeBonus);
+      
+      const newScore = currentPlayer.score + scoreChange;
+      currentPlayer.score = Math.max(0, newScore); // Floor at 0
+
+      set({
+        players: updatedPlayers,
+        phase: 'RESOLUTION',
+        currentInput: '',
+        feedback: null
+      });
+      return;
+    }
+
+    // Case 2: Timeout (Game Over for turn)
+    if (timeRemaining <= 0) {
+       const penalty = config.penalty;
+       const newScore = currentPlayer.score - penalty;
+       currentPlayer.score = Math.max(0, newScore);
+       
+       set({
+         players: updatedPlayers,
+         phase: 'RESOLUTION',
+         currentInput: '',
+         feedback: null
+       });
+       return;
+    }
+
+    // Case 3: Incorrect Answer (Penalty & Continue)
+    const penalty = config.penalty;
+    const newScore = currentPlayer.score - penalty;
+    currentPlayer.score = Math.max(0, newScore);
+    
     set({
       players: updatedPlayers,
-      phase: 'RESOLUTION',
+      feedback: `-${penalty}`,
+      currentInput: '' // Clear input to allow retry
     });
+
+    // Clear feedback message after 1.5s
+    setTimeout(() => {
+      // Only clear if it hasn't changed or we haven't moved phase
+      const { feedback, phase } = get();
+      if (phase === 'ACTIVE' && feedback === `-${penalty}`) {
+        set({ feedback: null });
+      }
+    }, 1000);
   },
 
   nextTurn: () => {
     const { players, currentTurnIndex } = get();
     const nextIndex = (currentTurnIndex + 1) % players.length;
     
-    // Check for Game Over condition (if we had rounds)
-    // For now, just loop
     set({
       currentTurnIndex: nextIndex,
       phase: 'INTERSTITIAL',
       currentInput: '',
       timeRemaining: TURN_DURATION,
+      feedback: null
     });
   },
 
@@ -166,7 +197,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ timeRemaining: newTime });
     
     if (newTime <= 0) {
-      get().submitAnswer(); // Timeout acts as submit
+      get().submitAnswer(); 
     }
   },
 }));
